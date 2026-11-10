@@ -1,0 +1,5 @@
+# Raspberry Pi 3 firmware settings for the bare-metal drumbox kernel.
+arm_64bit=1
+kernel=kernel8.img
+kernel_address=0x80000
+initial_turbo=0

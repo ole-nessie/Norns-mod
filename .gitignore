@@ -1,0 +1,17 @@
+build/
+dist/
+pi-deps/
+.ref/
+.DS_Store
+
+# Circle compiles objects next to their sources.
+src/core/**/*.o
+src/core/**/*.d
+src/core/*.o
+src/core/*.d
+src/pi/*.o
+src/pi/*.d
+src/pi/*.elf
+src/pi/*.img
+src/pi/*.lst
+src/pi/*.map
