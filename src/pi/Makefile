@@ -8,13 +8,19 @@ CIRCLEHOME ?= $(ROOT)/pi-deps/circle
 
 CORE = ../core
 
-OBJS = main.o kernel.o cs4270.o ssd1322.o drumbox_sound.o \
-       $(CORE)/midi.o $(CORE)/synth.o $(CORE)/efm_kick.o $(CORE)/sid_voice.o \
-       $(CORE)/ui/canvas.o $(CORE)/ui/param_page.o
+OBJS = main.o kernel.o cs4270.o ssd1322.o drumbox_sound.o panel.o sd_storage.o \
+       $(CORE)/midi.o $(CORE)/synth.o $(CORE)/controller.o $(CORE)/machines.o \
+       $(CORE)/preset.o $(CORE)/fx.o $(CORE)/analog_drum.o $(CORE)/efm_kick.o $(CORE)/efm_drum.o \
+       $(CORE)/fm_voice.o $(CORE)/fm4_voice.o $(CORE)/acid_voice.o $(CORE)/chord_voice.o \
+       $(CORE)/metal_voice.o $(CORE)/sid_voice.o \
+       $(CORE)/ui/canvas.o $(CORE)/ui/param_page.o $(CORE)/ui/console.o
 
-INCLUDE += -I $(CORE) -I $(ROOT)/third_party
+INCLUDE += -I $(CORE) -I $(ROOT)/third_party \
+           -I $(CIRCLEHOME)/addon -I $(CIRCLEHOME)/addon/fatfs
 
-LIBS = $(CIRCLEHOME)/lib/usb/libusb.a \
+LIBS = $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
+       $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
+       $(CIRCLEHOME)/lib/usb/libusb.a \
        $(CIRCLEHOME)/lib/input/libinput.a \
        $(CIRCLEHOME)/lib/fs/libfs.a \
        $(CIRCLEHOME)/lib/sound/libsound.a \

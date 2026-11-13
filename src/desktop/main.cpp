@@ -13,11 +13,13 @@
 
 #include "audio.h"
 #include "display.h"
-#include "efm_kick.h"
+#include "file_storage.h"
 #include "keyboard.h"
+#include "machines.h"
 #include "midi_input.h"
-#include "sid_voice.h"
+#include "panel_event.h"
 #include "synth.h"
+#include "ui/console.h"
 #include "ui/canvas.h"
 #include "ui/param_page.h"
 
@@ -36,6 +38,7 @@ struct Options {
     std::string audioDevice;
     std::string midiPort;
     bool list = false;
+    bool monitor = false;
 };
 
 void usage() {
@@ -44,7 +47,8 @@ void usage() {
         "  --no-display    do not draw the parameter page in the terminal\n"
         "  --audio <name>  playback device name contains <name>\n"
         "  --midi <name>   only open MIDI inputs whose name contains <name>\n"
-        "  --list          list audio devices and MIDI inputs, then exit\n");
+        "  --list          list audio devices and MIDI inputs, then exit\n"
+        "  --monitor       print incoming MIDI, to check the BeatStep Pro\n");
 }
 
 bool parse(int argc, char** argv, Options& o) {
@@ -63,6 +67,8 @@ bool parse(int argc, char** argv, Options& o) {
             if (!value(o.midiPort)) return false;
         } else if (arg == "--list") {
             o.list = true;
+        } else if (arg == "--monitor") {
+            o.monitor = true;
         } else {
             return false;
         }
@@ -147,13 +153,21 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 
-    static EfmKick kick;
+    static MachinePool pool;
     static Synth synth(static_cast<float>(kSampleRate));
-    synth.addVoice(kKickChannel, &kick);
-    static SidVoice sid;
-    synth.addVoice(kSidChannel, &sid);
+    static FileStorage storage;
+    pool.prepare(static_cast<float>(kSampleRate));
+    synth.setPool(&pool);
+    synth.perform({SynthOp::SetMachine, static_cast<uint8_t>(kKickChannel),
+                   static_cast<int8_t>(kMachineEfmDrum), 0});
+    synth.perform({SynthOp::SetMachine, static_cast<uint8_t>(kSidChannel),
+                   static_cast<int8_t>(kMachineSid), 0});
+    Console console(synth, &storage);
+    console.loadStartup();
+    console.arm(nowMs());
 
     MidiInput midi;
+    midi.setMonitor(opt.monitor);
     midi.open(opt.midiPort);
     for (MidiQueue* q : midi.queues()) synth.addQueue(q);
     static MidiQueue keyboardQueue;
@@ -161,7 +175,7 @@ int main(int argc, char** argv) {
 
     AudioOutput audio;
     if (!audio.start(synth, opt.audioDevice)) return 1;
-    std::fprintf(stderr, "kick on MIDI channel %d, SID on %d, params on CC %d-%d\n",
+    std::fprintf(stderr, "EFM drums on MIDI channel %d, SID on %d, params on CC %d-%d\n",
                  kKickChannel + 1, kSidChannel + 1, kFirstParamCc, kFirstParamCc + kMaxParams - 1);
 
     TerminalDisplay display;
@@ -172,12 +186,34 @@ int main(int argc, char** argv) {
     KeyboardController keys(keyboardQueue);
     Canvas canvas;
     PageView page(synth);
+    bool menuWasOpen = false;
 
     while (gRunning) {
+        const uint32_t now = nowMs();
         for (int key; (key = keyboard.poll()) >= 0;) {
-            if (!keys.handle(key, synth)) gRunning = false;
+            if (key == 'q') gRunning = false;
+            else if (key == 'm') console.handle({PanelControl::Key, 0, 1}, now);
+            else if (key == '9') console.handle({PanelControl::Key, 1, 1}, now);
+            else if (key == '0') console.handle({PanelControl::Key, 2, 1}, now);
+            else if (key == '[') console.handle({PanelControl::Encoder, 0, -1}, now);
+            else if (key == ']') console.handle({PanelControl::Encoder, 0, 1}, now);
+            else if (key == ';') console.handle({PanelControl::Encoder, 1, -1}, now);
+            else if (key == '\'') console.handle({PanelControl::Encoder, 1, 1}, now);
+            else if (key == ',') console.handle({PanelControl::Encoder, 2, -1}, now);
+            else if (key == '.') console.handle({PanelControl::Encoder, 2, 1}, now);
+            else if (!keys.handle(key, synth)) gRunning = false;
         }
-        if (showPage && page.update(canvas, nowMs())) display.show(canvas);
+        console.tick(now);
+        if (showPage && console.open()) {
+            menuWasOpen = true;
+            if (console.update(canvas, now)) display.show(canvas);
+        } else if (showPage) {
+            if (menuWasOpen) {
+                menuWasOpen = false;
+                page.invalidate();
+            }
+            if (page.update(canvas, now)) display.show(canvas);
+        }
         std::this_thread::sleep_for(kFrameTime);
     }
 

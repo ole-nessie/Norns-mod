@@ -137,6 +137,10 @@ void SidVoice::noteOff(uint8_t note) {
     ampStage_ = AmpStage::Release;
 }
 
+void SidVoice::releaseAll() {
+    if (ampStage_ != AmpStage::Idle) ampStage_ = AmpStage::Release;
+}
+
 void SidVoice::Svf::set(float hz, float sampleRate, float damping) {
     const float g = tanf(kPi * hz / sampleRate);
     k = damping;

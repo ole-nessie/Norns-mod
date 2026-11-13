@@ -44,7 +44,7 @@ void TerminalDisplay::show(const Canvas& c) {
         }
         out += "\x1b[0m\n";
     }
-    out += "a-k: notes  space: C2  z: off  c: channel  p: page  1-8: param  -/=: change  q: quit\n";
+    out += "m menu  [ ] ch  ; ' page  , . value  9/0 slot   a-k notes  q quit\n";
     std::fputs(out.c_str(), stdout);
     std::fflush(stdout);
 }

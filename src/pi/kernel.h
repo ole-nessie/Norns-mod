@@ -16,15 +16,18 @@
 #include <circle/types.h>
 #include <circle/usb/usbhcidevice.h>
 #include <circle/usb/usbmidi.h>
+#include <SDCard/emmc.h>
 
 #include "cs4270.h"
 #include "drumbox_sound.h"
-#include "efm_kick.h"
-#include "sid_voice.h"
+#include "machines.h"
 #include "midi.h"
+#include "panel.h"
+#include "sd_storage.h"
 #include "ssd1322.h"
 #include "synth.h"
 #include "ui/canvas.h"
+#include "ui/console.h"
 
 class CKernel {
 public:
@@ -46,7 +49,8 @@ private:
     void pollSerialMidi();
     void showMessage(const char* line1, const char* line2);
 
-    static void usbMidiPacket(unsigned cable, u8* packet, unsigned length);
+    static void usbMidiPacket(unsigned cable, u8* packet, unsigned length, unsigned device,
+                              void* param);
     static void usbMidiRemoved(CDevice* device, void* context);
 
     // Construction order matters (Circle's system objects first).
@@ -61,6 +65,7 @@ private:
     CTimer timer_;
     CLogger logger_;
     CUSBHCIDevice usb_;
+    CEMMCDevice emmc_;
     CI2CMaster i2c_;
     CSPIMaster spi_;
     CSerialDevice serial_;  // DIN MIDI in on the UART RX pin (GPIO15), 31250 baud
@@ -69,15 +74,18 @@ private:
     Ssd1322 oled_;
     Canvas canvas_;
 
-    EfmKick kick_;
-    SidVoice sid_;
+    SdStorage sd_;
+    MachinePool pool_;
     Synth synth_;
+    Console console_;
+    Panel panel_;
     DrumboxSound* sound_ = nullptr;
 
-    MidiQueue usbQueue_;     // producer: USB IRQ
-    MidiQueue serialQueue_;  // producer: main loop
+    static constexpr int kUsbMidiPorts = 4;
+    MidiQueue usbQueues_[kUsbMidiPorts];  // one producer IRQ per USB device
+    MidiQueue serialQueue_;               // producer: main loop
     MidiParser serialParser_;
-    CUSBMIDIDevice* usbMidi_ = nullptr;
+    CUSBMIDIDevice* usbMidi_[kUsbMidiPorts] = {};
     boolean serialReady_ = FALSE;
     Stage stage_ = Stage::System;
 

@@ -15,20 +15,25 @@ struct PageState {
     uint8_t values[kParamsPerPage] = {};
     int lastTouched = -1;  // index within the page
     bool triggerFlash = false;
+    bool master = false;  // master effect page
+    bool strip = false;   // channel volume and sends
+    char kitName[9] = {};  // shown in place of the machine name after a kit encoder load
 
     bool operator==(const PageState& o) const;
 };
 
 void drawParamPage(Canvas& canvas, const PageState& state);
 
-// Follows the synth's focused voice, shows the page of its last-touched
-// parameter, and redraws only when something changed.
+// Follows the synth's focused voice and page, and redraws only when
+// something changed. The highlighted cell is the last parameter edited on
+// the page now showing.
 class PageView {
 public:
     explicit PageView(const Synth& synth) : synth_(synth) {}
 
     // Returns true when `canvas` was redrawn and should be sent to the display.
     bool update(Canvas& canvas, uint32_t nowMs);
+    void invalidate() { drawn_ = false; }
 
 private:
     const Synth& synth_;

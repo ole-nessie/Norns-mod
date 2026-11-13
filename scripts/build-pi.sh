@@ -13,6 +13,8 @@ if [[ ! -f "$DEPS/circle/Config.mk" ]]; then
 fi
 
 export PATH="$DEPS/toolchain/bin:$PATH"
+make -C "$DEPS/circle/addon/SDCard" -j"$(getconf _NPROCESSORS_ONLN)"
+make -C "$DEPS/circle/addon/fatfs" -j"$(getconf _NPROCESSORS_ONLN)"
 make -C "$ROOT/src/pi" -j"$(getconf _NPROCESSORS_ONLN)"
 
 rm -rf "$OUT"

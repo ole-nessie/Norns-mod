@@ -27,10 +27,22 @@ FetchContent_MakeAvailable(rtmidi)
 add_library(drumbox_core STATIC
   src/core/midi.cpp
   src/core/synth.cpp
+  src/core/controller.cpp
+  src/core/machines.cpp
+  src/core/preset.cpp
+  src/core/fx.cpp
+  src/core/analog_drum.cpp
   src/core/efm_kick.cpp
+  src/core/efm_drum.cpp
+  src/core/fm_voice.cpp
+  src/core/fm4_voice.cpp
+  src/core/acid_voice.cpp
+  src/core/chord_voice.cpp
+  src/core/metal_voice.cpp
   src/core/sid_voice.cpp
   src/core/ui/canvas.cpp
   src/core/ui/param_page.cpp
+  src/core/ui/console.cpp
 )
 target_include_directories(drumbox_core PUBLIC src/core third_party)
 target_compile_options(drumbox_core PRIVATE -Wall -Wextra)
@@ -41,6 +53,7 @@ add_executable(drumbox
   src/desktop/midi_input.cpp
   src/desktop/terminal_display.cpp
   src/desktop/keyboard.cpp
+  src/desktop/file_storage.cpp
 )
 target_include_directories(drumbox PRIVATE src/desktop ${miniaudio_SOURCE_DIR})
 target_link_libraries(drumbox PRIVATE drumbox_core rtmidi)

@@ -17,11 +17,17 @@ std::string lower(std::string s) {
 
 void onMessage(double, std::vector<unsigned char>* bytes, void* userData) {
     if (bytes->empty()) return;
+    auto* sink = static_cast<MidiSink*>(userData);
     MidiMessage msg;
     msg.status = (*bytes)[0];
     if (bytes->size() > 1) msg.data1 = (*bytes)[1];
     if (bytes->size() > 2) msg.data2 = (*bytes)[2];
-    static_cast<MidiQueue*>(userData)->push(msg);
+    if (sink->monitor && *sink->monitor && msg.status < 0xF0) {
+        std::fprintf(stderr, "midi ch %u %s %u %u\n", msg.channel() + 1,
+                     msg.type() == 0x90 ? "note-on" : msg.type() == 0x80 ? "note-off" : "cc",
+                     msg.data1, msg.data2);
+    }
+    sink->queue->push(msg);
 }
 
 }  // namespace
@@ -47,7 +53,10 @@ bool MidiInput::addPort(int index, const std::string& name) {
         port.in = std::make_unique<RtMidiIn>(RtMidi::UNSPECIFIED, kClientName);
         port.queue = std::make_unique<MidiQueue>();
         port.in->ignoreTypes(true, true, true);
-        port.in->setCallback(onMessage, port.queue.get());
+        port.sink = std::make_unique<MidiSink>();
+        port.sink->queue = port.queue.get();
+        port.sink->monitor = &monitor_;
+        port.in->setCallback(onMessage, port.sink.get());
         if (index < 0) {
             port.in->openVirtualPort(name);
         } else {

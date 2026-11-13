@@ -23,13 +23,15 @@ CKernel::CKernel()
       timer_(&interrupt_),
       logger_(options_.GetLogLevel(), &timer_),
       usb_(&interrupt_, &timer_, TRUE),  // TRUE: plug-and-play
+      emmc_(&interrupt_, &timer_, nullptr),
       i2c_(CMachineInfo::Get()->GetDevice(DeviceI2CMaster), TRUE),
       spi_(kSpiClockHz, 0, 0, 0),
       // With USE_USB_FIQ the FIQ belongs to USB, so the UART uses the IRQ.
       serial_(&interrupt_, FALSE),
       codec_(&i2c_),
       oled_(&spi_),
-      synth_(static_cast<float>(kSampleRate)) {
+      synth_(static_cast<float>(kSampleRate)),
+      console_(synth_, &sd_) {
     instance_ = this;
     actLed_.Blink(3);
 }
@@ -83,9 +85,21 @@ boolean CKernel::Initialize() {
         return FALSE;
     }
 
-    synth_.addVoice(kKickChannel, &kick_);
-    synth_.addVoice(kSidChannel, &sid_);
-    synth_.addQueue(&usbQueue_);
+    showMessage("DRUMBOX", "card...");
+    if (!emmc_.Initialize() || !sd_.mount()) {
+        showMessage("NO SD CARD", "saves off");
+        CTimer::SimpleMsDelay(800);
+    }
+
+    pool_.prepare(static_cast<float>(kSampleRate));
+    synth_.setPool(&pool_);
+    synth_.perform({SynthOp::SetMachine, static_cast<uint8_t>(kKickChannel),
+                    static_cast<int8_t>(kMachineEfmDrum), 0});
+    synth_.perform({SynthOp::SetMachine, static_cast<uint8_t>(kSidChannel),
+                    static_cast<int8_t>(kMachineSid), 0});
+    console_.loadStartup();
+    console_.arm(static_cast<uint32_t>(CTimer::GetClockTicks64() / (CLOCKHZ / 1000)));
+    for (MidiQueue& queue : usbQueues_) synth_.addQueue(&queue);
     synth_.addQueue(&serialQueue_);
 
     enterStage(Stage::Audio);
@@ -97,7 +111,7 @@ boolean CKernel::Initialize() {
     }
     enterStage(Stage::Running);
 
-    logger_.Write(kFrom, LogNotice, "ready: kick on MIDI channel %d, SID on %d, CC %u-%u",
+    logger_.Write(kFrom, LogNotice, "ready: EFM drums on MIDI channel %d, SID on %d, CC %u-%u",
                   kKickChannel + 1, kSidChannel + 1, kFirstParamCc, kFirstParamCc + kMaxParams - 1);
     return TRUE;
 }
@@ -109,27 +123,35 @@ void CKernel::showMessage(const char* line1, const char* line2) {
     oled_.Show(canvas_);
 }
 
-void CKernel::usbMidiPacket(unsigned, u8* packet, unsigned length) {
+void CKernel::usbMidiPacket(unsigned, u8* packet, unsigned length, unsigned device, void*) {
+    if (device < 1 || device > kUsbMidiPorts) return;
     if (length < 2 || !(packet[0] & 0x80) || packet[0] >= 0xF0) return;
     MidiMessage msg;
     msg.status = packet[0];
     msg.data1 = packet[1];
     msg.data2 = length > 2 ? packet[2] : 0;
-    instance_->usbQueue_.push(msg);
+    instance_->usbQueues_[device - 1].push(msg);
 }
 
-void CKernel::usbMidiRemoved(CDevice* device, void*) {
-    if (instance_->usbMidi_ == device) instance_->usbMidi_ = nullptr;
+void CKernel::usbMidiRemoved(CDevice* device, void* context) {
+    const unsigned index = static_cast<unsigned>(reinterpret_cast<unsigned long>(context));
+    if (index < kUsbMidiPorts && instance_->usbMidi_[index] == device) {
+        instance_->usbMidi_[index] = nullptr;
+    }
 }
 
 void CKernel::attachUsbMidi() {
-    if (usbMidi_) return;
-    auto* midi = static_cast<CUSBMIDIDevice*>(CDeviceNameService::Get()->GetDevice("umidi1", FALSE));
-    if (!midi) return;
-    midi->RegisterRemovedHandler(usbMidiRemoved);
-    midi->RegisterPacketHandler(usbMidiPacket);
-    usbMidi_ = midi;
-    logger_.Write(kFrom, LogNotice, "USB MIDI device attached");
+    for (unsigned i = 0; i < kUsbMidiPorts; ++i) {
+        if (usbMidi_[i]) continue;
+        auto* midi = static_cast<CUSBMIDIDevice*>(
+            CDeviceNameService::Get()->GetDevice("umidi", i + 1, FALSE));
+        if (!midi) continue;
+        midi->RegisterRemovedHandler(usbMidiRemoved,
+                                     reinterpret_cast<void*>(static_cast<unsigned long>(i)));
+        midi->RegisterPacketHandler(usbMidiPacket, nullptr);
+        usbMidi_[i] = midi;
+        logger_.Write(kFrom, LogNotice, "USB MIDI device umidi%u attached", i + 1);
+    }
 }
 
 void CKernel::pollSerialMidi() {
@@ -144,9 +166,11 @@ void CKernel::pollSerialMidi() {
 
 void CKernel::Run() {
     PageView page(synth_);
+    panel_.begin();
     unsigned lastFrame = 0;
     unsigned lastBeat = 0;
     boolean ledOn = FALSE;
+    boolean menuWasOpen = FALSE;
 
     for (;;) {
         // Slow heartbeat on the green LED: the kernel is running.
@@ -158,13 +182,29 @@ void CKernel::Run() {
         }
 
         // Must run at task level to notice USB devices being plugged in.
-        if (usb_.UpdatePlugAndPlay()) attachUsbMidi();
+        // Also scans once per loop: a device can finish enumerating without a
+        // later plug event, and a removed slot has to be picked up again.
+        usb_.UpdatePlugAndPlay();
+        attachUsbMidi();
         pollSerialMidi();
 
         const unsigned nowMs = static_cast<unsigned>(CTimer::GetClockTicks64() / (CLOCKHZ / 1000));
+        PanelEvent events[8];
+        const int nEvents = panel_.poll(events, 8, nowMs);
+        for (int i = 0; i < nEvents; ++i) console_.handle(events[i], nowMs);
         if (nowMs - lastFrame >= kFrameMs) {
             lastFrame = nowMs;
-            if (page.update(canvas_, nowMs)) oled_.Show(canvas_);
+            console_.tick(nowMs);
+            if (console_.open()) {
+                menuWasOpen = TRUE;
+                if (console_.update(canvas_, nowMs)) oled_.Show(canvas_);
+            } else {
+                if (menuWasOpen) {
+                    menuWasOpen = FALSE;
+                    page.invalidate();
+                }
+                if (page.update(canvas_, nowMs)) oled_.Show(canvas_);
+            }
         }
     }
 }

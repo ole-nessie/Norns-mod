@@ -33,6 +33,8 @@ public:
     virtual void setParam(int index, uint8_t value) = 0;
     virtual void noteOn(uint8_t note, float velocity) = 0;
     virtual void noteOff(uint8_t /*note*/) {}
+    // Release every held note, the same as note-off. One-shot drums ignore this.
+    virtual void releaseAll() {}
     // Adds mono output to `out`.
     virtual void render(float* out, int frames) = 0;
 };

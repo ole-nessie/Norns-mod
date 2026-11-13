@@ -13,12 +13,12 @@ onto the card.
 Read "Current state" and "Key design decisions", then do the tasks in order.
 Stop after each one so the user can test it on the hardware.
 
-- [ ] 1. Several USB MIDI devices at once (Phase 1).
-- [ ] 2. BeatStep Pro follows the OLED: encoders, channel pads, page pads,
-      audition (Phase 2). No pad lights.
-- [ ] 3. Norns keys and encoders (Phase 3).
-- [ ] 4. SD card storage and autosave (Phase 4).
-- [ ] 5. Sets, kits, and choosing the machine per channel (Phase 5).
+- [x] 1. Several USB MIDI devices at once (Phase 1). Built, not yet tried on the norns.
+- [x] 2. BeatStep Pro follows the OLED: encoders, channel pads, page pads,
+      audition (Phase 2). Built, not yet tried on the norns. No pad lights.
+- [x] 3. Norns keys and encoders (Phase 3). Built, not yet tried on the norns.
+- [x] 4. SD card storage and autosave (Phase 4). Built, not yet tried on the norns.
+- [x] 5. Sets, kits, and choosing the machine per channel (Phase 5). Built, not yet tried on the norns.
 
 Pad LED feedback is out of scope. A SysEx blink exists
 (`F0 00 20 6B 7F 42 02 00 10 <pad> <value> F7`, pad ids 0x70-0x77 bottom row,

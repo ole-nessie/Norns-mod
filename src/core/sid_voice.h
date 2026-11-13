@@ -28,6 +28,7 @@ public:
     void setParam(int index, uint8_t value) override;
     void noteOn(uint8_t note, float velocity) override;
     void noteOff(uint8_t note) override;
+    void releaseAll() override;
     void render(float* out, int frames) override;
 
 private:
